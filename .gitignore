@@ -1,0 +1,20 @@
+node_modules
+
+# Output
+/.svelte-kit
+/build
+
+# OS
+.DS_Store
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Local development data (used when NOTION_TOKEN is not set)
+data/*.json

@@ -1,0 +1,17 @@
+services:
+  presencas:
+    container_name: ceist-presencas
+    image: ghcr.io/ceist-sa/ceist-presencas:main
+    pull_policy: always
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - caddy
+    labels:
+      caddy: presencas.ceist.pt
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+
+networks:
+  caddy:
+    external: true
