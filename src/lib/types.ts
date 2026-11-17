@@ -25,7 +25,7 @@ export interface Program {
 	/** Notion page id */
 	id: string;
 	name: string;
-	/** e.g. "2026/27". Programs of different seasons can share a name. */
+	/** e.g. "2026-2027". Programs of different seasons can share a name, and a season is made of its programs. */
 	season: string;
 	/** First and last day, `YYYY-MM-DD` */
 	start: string;

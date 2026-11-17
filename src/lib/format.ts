@@ -33,3 +33,8 @@ export function shortMonth(wallClock: string): string {
 export function time(wallClock: string): string {
 	return wallClock.slice(11, 16);
 }
+
+/** "segunda-feira, 16 de novembro de 2026" */
+export function fullDate(wallClock: string): string {
+	return format(wallClock, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}

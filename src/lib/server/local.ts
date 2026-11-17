@@ -27,9 +27,9 @@ export async function getMembers(): Promise<Member[]> {
 /** Two seasons with a program of the same name, as happens with the real ones */
 export async function getPrograms(): Promise<Program[]> {
 	return [
-		{ id: 'program-1', name: 'Natal', season: '2025/26', start: '2025-11-01', end: '2025-12-20' },
-		{ id: 'program-2', name: 'Outono', season: '2026/27', start: '2026-09-14', end: '2026-11-08' },
-		{ id: 'program-3', name: 'Natal', season: '2026/27', start: '2026-11-09', end: '2026-12-20' }
+		{ id: 'program-1', name: 'Natal', season: '2025-2026', start: '2025-11-01', end: '2025-12-20' },
+		{ id: 'program-2', name: 'Outono', season: '2026-2027', start: '2026-09-14', end: '2026-11-08' },
+		{ id: 'program-3', name: 'Natal', season: '2026-2027', start: '2026-11-09', end: '2026-12-20' }
 	];
 }
 

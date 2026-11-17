@@ -65,7 +65,7 @@ without access to Notion.
 ### Programs
 
 A season is split into programs ("Outono", "Natal"…), kept in a "Programas" database in Notion with a name,
-a season (`Temporada`, e.g. "2026/27", since names repeat from year to year) and start and end dates
+a season (`Temporada`, e.g. "2026-2027", since names repeat from year to year) and start and end dates
 (`Início`, `Fim`). An event belongs to the program whose dates include it. The Estatísticas page shows the
 statistics of a program or of a whole season, and a grid with a row per member and a column per event.
 

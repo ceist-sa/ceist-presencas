@@ -63,7 +63,7 @@ async function addColumns(database: string, title: string, columns: Record<strin
 
 if (isId(programs)) {
 	const database = await addColumns(programs, 'Nome', {
-		// e.g. "2026/27"; the site works it out from the start date when it is left empty
+		// e.g. "2026-2027"; the site works it out from the start date when it is left empty
 		Temporada: { select: {} },
 		Início: { date: {} },
 		Fim: { date: {} }

@@ -25,7 +25,8 @@
 		{#if signedIn}
 			<nav class="label ml-auto flex items-center gap-4 text-sm whitespace-nowrap">
 				{#each links as link (link.href)}
-					{@const current = link.href === '/' ? !page.url.pathname.startsWith('/estatisticas') : page.url.pathname.startsWith(link.href)}
+					{@const inStatistics = page.url.pathname.startsWith('/estatisticas') || page.url.pathname.startsWith('/membros')}
+					{@const current = (link.href === '/estatisticas') === inStatistics}
 					<a href={link.href} class="py-2 {current ? 'underline underline-offset-8' : 'opacity-60'}" aria-current={current ? 'page' : undefined}>
 						{link.label}
 					</a>

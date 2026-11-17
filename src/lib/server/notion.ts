@@ -36,7 +36,7 @@ const ATTENDANCE = {
 /** Property names in the "Programas" database. scripts/setup-notion.ts adds them with the same names. */
 const PROGRAM = {
 	name: 'Nome',
-	/** e.g. "2026/27". Worked out from the start date when left empty. */
+	/** e.g. "2026-2027". Worked out from the start date when left empty. */
 	season: 'Temporada',
 	start: 'Início',
 	end: 'Fim'
@@ -160,7 +160,7 @@ export async function getPrograms(): Promise<Program[]> {
 				season: season?.select?.name ?? (plainText(season) || seasonOf(start)),
 				start,
 				// A program with no end date yet runs until the end of its season
-				end: properties[PROGRAM.end]?.date?.start?.slice(0, 10) ?? seasonRange(seasonOf(start)).to
+				end: properties[PROGRAM.end]?.date?.start?.slice(0, 10) ?? seasonRange(seasonOf(start))!.to
 			};
 		})
 		.filter((program) => program !== undefined)
@@ -204,20 +204,64 @@ async function inParallel(tasks: (() => Promise<unknown>)[], workers = 3): Promi
 	);
 }
 
-// A season is a few hundred to a couple of thousand rows, fetched 100 at a time, so it is kept for a
-// while. Saving through the site updates the copy; edits made directly in Notion show up when it expires.
+// A season is a couple of thousand rows, fetched 100 at a time, which takes seconds. So a copy is kept
+// and answers straight away; once it is a few minutes old it is fetched again in the background, and the
+// pages only wait for Notion when there is no recent copy or they ask for older events than it has.
+// Saving through the site updates the copy; edits made directly in Notion show up with the next refresh.
 let attendanceCache: { at: number; since: string; records: Map<string, AttendanceRecord> } | undefined;
+/** How old a copy can be and still be shown while a new one is fetched */
+const ATTENDANCE_STALE_MS = 60 * 60 * 1000;
+let refreshing: Promise<unknown> | undefined;
+/** Counts saves, so that a copy fetched while one was going on isn't kept */
+let saves = 0;
 
 /** Every event recorded since the given time, rebuilt from the one-row-per-member-per-event table. */
 export async function getAttendance(since: string): Promise<AttendanceRecord[]> {
+	const cache = attendanceCache;
 	// A copy that goes further back than asked also has the answer
-	if (attendanceCache && attendanceCache.since <= since && Date.now() - attendanceCache.at < ATTENDANCE_CACHE_MS) {
-		return [...attendanceCache.records.values()].filter((record) => record.start >= since);
+	if (cache && cache.since <= since && Date.now() - cache.at < ATTENDANCE_STALE_MS) {
+		if (Date.now() - cache.at >= ATTENDANCE_CACHE_MS && !refreshing) {
+			refreshing = fetchAttendance(cache.since)
+				.catch((error) => console.error('Could not refresh the attendance:', error))
+				.finally(() => (refreshing = undefined));
+		}
+		return [...cache.records.values()].filter((record) => record.start >= since);
 	}
 
-	const pages = await queryAll(required('NOTION_ATTENDANCE_DB'), {
-		filter: { property: ATTENDANCE.date, date: { on_or_after: since.slice(0, 10) } }
-	});
+	// Keep going as far back as the copy did, so that looking at an old season once makes it fast from then on
+	const from = cache && cache.since < since ? cache.since : since;
+	const records = await fetchAttendance(from);
+	return [...records.values()].filter((record) => record.start >= since);
+}
+
+async function fetchAttendance(since: string): Promise<Map<string, AttendanceRecord>> {
+	const savesBefore = saves;
+	// Notion compares dates in UTC, where an event at midnight in Lisbon's summer falls on the day before.
+	// So the day before is asked for too, and the rows are then filtered by their keys.
+	const DAY = 24 * 60 * 60 * 1000;
+	const first = Date.parse(`${since.slice(0, 10)}T00:00:00Z`) - DAY;
+	const date = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+	const from = (ms: number) => ({ property: ATTENDANCE.date, date: { on_or_after: date(ms) } });
+
+	// Notion hands rows out 100 at a time, one page after the other. Several years of them are read much
+	// faster as a few stretches of time side by side. The last stretch is open-ended, for future events.
+	const STRETCH = 120 * DAY;
+	const filters: Json[] = [];
+	for (let start = first; ; start += STRETCH) {
+		const end = start + STRETCH;
+		// A start date so far back that it would take dozens of stretches is read in one go instead
+		if (end >= Date.now() || filters.length >= 24) {
+			filters.push(from(filters.length >= 24 ? first : start));
+			break;
+		}
+		filters.push({ and: [from(start), { property: ATTENDANCE.date, date: { before: date(end) } }] });
+	}
+	const databaseId = required('NOTION_ATTENDANCE_DB');
+	const stretches = filters.length > 24 ? filters.slice(-1) : filters;
+	const pages: Json[] = [];
+	await inParallel(stretches.map((filter) => async () => pages.push(...(await queryAll(databaseId, { filter })))));
+	// The key is the event's start time without its colon
+	const startOf = (key: string) => `${key.slice(0, 13)}:${key.slice(13)}`;
 
 	const records = new Map<string, AttendanceRecord>();
 	const seen = new Set<string>();
@@ -227,7 +271,7 @@ export async function getAttendance(since: string): Promise<AttendanceRecord[]> 
 		const state = stateOf(page);
 		// Rows without a key, member or state were added or emptied by hand and can't be used. Should a
 		// member have two rows for one event, the first wins; saving the event removes the other.
-		if (!key || !member || !state || seen.has(`${key}/${member}`)) continue;
+		if (!key || !member || !state || startOf(key) < since || seen.has(`${key}/${member}`)) continue;
 		seen.add(`${key}/${member}`);
 
 		let record = records.get(key);
@@ -235,8 +279,7 @@ export async function getAttendance(since: string): Promise<AttendanceRecord[]> 
 			record = {
 				key,
 				title: plainText(page.properties[ATTENDANCE.event]),
-				// The key is the start time without its colon
-				start: `${key.slice(0, 13)}:${key.slice(13)}`,
+				start: startOf(key),
 				present: [],
 				late: [],
 				absent: [],
@@ -247,8 +290,11 @@ export async function getAttendance(since: string): Promise<AttendanceRecord[]> 
 		record[state].push(member);
 	}
 
-	attendanceCache = { at: Date.now(), since, records };
-	return [...records.values()];
+	// Rows read while an event was being saved may be half of it
+	if (saves === savesBefore) {
+		attendanceCache = { at: Date.now(), since, records };
+	}
+	return records;
 }
 
 /**
@@ -307,12 +353,16 @@ export async function saveAttendance(record: AttendanceRecord, program?: string)
 		tasks.push(() => notion('/pages', { method: 'POST', body: { parent: { database_id: databaseId }, properties } }));
 	}
 
+	// Counted before and after, so that a copy fetched at any point during the save is discarded
+	saves++;
 	try {
 		await inParallel(tasks);
 	} catch (error) {
 		// Some rows may have been written; the cached copy no longer matches Notion
 		attendanceCache = undefined;
 		throw error;
+	} finally {
+		saves++;
 	}
 	if (attendanceCache && record.start >= attendanceCache.since) {
 		attendanceCache.records.set(record.key, record);

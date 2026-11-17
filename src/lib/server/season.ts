@@ -31,11 +31,12 @@ export async function getSeason(from?: string): Promise<Season> {
 
 	const records = new Map(attendance.map((r) => [r.key, r]));
 
-	// A recorded event that was later moved or removed in the calendar is still listed
+	// A recorded event that was later moved or removed in the calendar is still listed. All-day events have
+	// midnight as their start.
 	const inCalendar = new Set(fromCalendar.map((r) => r.key));
 	const orphans = [...records.values()]
 		.filter((r) => !inCalendar.has(r.key))
-		.map((r): CalendarEvent => ({ key: r.key, title: r.title, start: r.start, end: null, allDay: false, location: '' }));
+		.map((r): CalendarEvent => ({ key: r.key, title: r.title, start: r.start, end: null, allDay: r.key.endsWith('T0000'), location: '' }));
 
 	return {
 		events: [...fromCalendar, ...orphans].sort((a, b) => a.start.localeCompare(b.start)),
