@@ -2,7 +2,7 @@
 // attendance kept in data/attendance.json.
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import type { AttendanceRecord, Member } from '$lib/types';
+import type { AttendanceRecord, Member, Program } from '$lib/types';
 
 const FILE = join(process.cwd(), 'data', 'attendance.json');
 
@@ -24,6 +24,15 @@ export async function getMembers(): Promise<Member[]> {
 	return SAMPLE.map(([name, section, status], index) => ({ id: `sample-${index + 1}`, name, section, status }));
 }
 
+/** Two seasons with a program of the same name, as happens with the real ones */
+export async function getPrograms(): Promise<Program[]> {
+	return [
+		{ id: 'program-1', name: 'Natal', season: '2025/26', start: '2025-11-01', end: '2025-12-20' },
+		{ id: 'program-2', name: 'Outono', season: '2026/27', start: '2026-09-14', end: '2026-11-08' },
+		{ id: 'program-3', name: 'Natal', season: '2026/27', start: '2026-11-09', end: '2026-12-20' }
+	];
+}
+
 function readAll(): AttendanceRecord[] {
 	return existsSync(FILE) ? JSON.parse(readFileSync(FILE, 'utf-8')) : [];
 }
@@ -32,7 +41,7 @@ export async function getAttendance(since: string): Promise<AttendanceRecord[]> 
 	return readAll().filter((record) => record.start >= since);
 }
 
-export async function saveAttendance(record: AttendanceRecord): Promise<void> {
+export async function saveAttendance(record: AttendanceRecord, _program?: string): Promise<void> {
 	const records = readAll().filter((r) => r.key !== record.key);
 	writeFileSync(FILE, JSON.stringify([...records, record], null, 4), 'utf-8');
 }

@@ -43,7 +43,10 @@
 	<h1 class="label mb-3 text-sm opacity-70">Próximos eventos</h1>
 	{#if data.upcoming.length}
 		<ul class="flex flex-col gap-2">
-			{#each data.upcoming as event (event.key)}
+			{#each data.upcoming as event, index (event.key)}
+				{#if data.hasPrograms && event.program !== data.upcoming[index - 1]?.program}
+					<li class="label text-xs opacity-60 {index ? 'mt-4' : ''}">{event.program ?? 'Sem programa'}</li>
+				{/if}
 				{@render row(event, false)}
 			{/each}
 		</ul>
@@ -56,7 +59,11 @@
 	<section class="mt-8">
 		<h2 class="label mb-3 text-sm opacity-70">Eventos anteriores</h2>
 		<ul class="flex flex-col gap-2">
-			{#each data.past as event (event.key)}
+			{#each data.past as event, index (event.key)}
+				<!-- The list is in date order, so a change of program starts a new block -->
+				{#if data.hasPrograms && event.program !== data.past[index - 1]?.program}
+					<li class="label text-xs opacity-60 {index ? 'mt-4' : ''}">{event.program ?? 'Sem programa'}</li>
+				{/if}
 				{@render row(event, true)}
 			{/each}
 		</ul>

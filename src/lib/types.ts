@@ -20,6 +20,18 @@ export interface Member {
 	photo?: string;
 }
 
+/** A block of rehearsals and concerts within a season, from the "Programas" database in Notion. */
+export interface Program {
+	/** Notion page id */
+	id: string;
+	name: string;
+	/** e.g. "2026/27". Programs of different seasons can share a name. */
+	season: string;
+	/** First and last day, `YYYY-MM-DD` */
+	start: string;
+	end: string;
+}
+
 /**
  * Who was at an event. A member is in at most one list. Those in none weren't expected: members who
  * only come when called up and weren't, or members who joined after the event was recorded.
@@ -31,7 +43,7 @@ export interface AttendanceRecord {
 	start: string;
 	/** Arrived on time */
 	present: string[];
-	/** Came, but arrived late */
+	/** Half a presence ("meia presença"): came, but arrived late or left early. Counts as half in the statistics. */
 	late: string[];
 	/** Absent without a justification */
 	absent: string[];

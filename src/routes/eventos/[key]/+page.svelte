@@ -67,6 +67,9 @@
 	<span class="first-letter:uppercase">{longDate(event.start)}</span>{#if !event.allDay}, {time(event.start)}{/if}
 	{#if event.location}· {event.location}{/if}
 </p>
+{#if data.program}
+	<p class="label mt-1 text-xs opacity-60">{data.program}</p>
+{/if}
 
 <div class="mt-4 flex gap-1 rounded-full bg-ink/5 p-1 text-sm sm:hidden" role="group" aria-label="Modo de registo">
 	{#each [['list', 'Lista'], ['cards', 'Cartões']] as const as [value, label] (value)}
@@ -149,7 +152,7 @@
 								aria-pressed={state === 'late'}
 								onclick={() => (states[member.id] = state === 'late' ? 'present' : 'late')}
 							>
-								Atraso
+								Meia presença
 							</button>
 						{:else}
 							<!-- With neither of these, the member wasn't called to this event -->
@@ -167,14 +170,14 @@
 	</div>
 
 	<div class="fixed inset-x-0 bottom-0 border-t border-ink/15 bg-paper">
-		<div class="mx-auto flex max-w-2xl items-center gap-4 px-4 py-3">
+		<div class="mx-auto flex max-w-5xl items-center gap-4 px-4 py-3">
 			<div class="flex-1 leading-tight">
 				<div class="font-bold">{regularCame} de {regularCalled} presentes</div>
 				<div class="text-sm opacity-70" role="status">
 					{#if form?.failed}
 						Não foi possível guardar. Tenta outra vez.
 					{:else}
-						{unsaved ? 'Por guardar' : 'Guardado'}{#if onCallCame}&nbsp;· +{onCallCame} por convocação{/if}{#if lateCount}&nbsp;· {lateCount} {lateCount === 1 ? 'atraso' : 'atrasos'}{/if}{#if justifiedCount}&nbsp;· {justifiedCount} {justifiedCount === 1 ? 'justificada' : 'justificadas'}{/if}
+						{unsaved ? 'Por guardar' : 'Guardado'}{#if onCallCame}&nbsp;· +{onCallCame} por convocação{/if}{#if lateCount}&nbsp;· {lateCount} {lateCount === 1 ? 'meia presença' : 'meias presenças'}{/if}{#if justifiedCount}&nbsp;· {justifiedCount} {justifiedCount === 1 ? 'justificada' : 'justificadas'}{/if}
 					{/if}
 				</div>
 			</div>

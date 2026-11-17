@@ -1,12 +1,16 @@
 import { error, fail } from '@sveltejs/kit';
 import { getSeason } from '$lib/server/season';
 import { saveAttendance } from '$lib/server/store';
+import { programLabel, programOf } from '$lib/programs';
 import { bySection } from '$lib/sections';
 import { defaultState, RECORDED_STATES, type AttendanceRecord, type MemberState } from '$lib/types';
 import type { Actions, PageServerLoad } from './$types';
 
+/** Events of earlier seasons are reached from the programs' grids, so the period goes back to the event's date. */
+const dateOf = (key: string) => (/^\d{4}-\d{2}-\d{2}T/.test(key) ? key.slice(0, 10) : undefined);
+
 export const load: PageServerLoad = async ({ params }) => {
-	const { events, records, members } = await getSeason();
+	const { events, records, members, programs } = await getSeason(dateOf(params.key));
 	const event = events.find((r) => r.key === params.key);
 	if (!event) {
 		error(404, 'Evento não encontrado');
@@ -28,12 +32,13 @@ export const load: PageServerLoad = async ({ params }) => {
 		states[member.id] = recorded.get(member.id) ?? (record ? 'notCalled' : defaultState(member));
 	}
 
-	return { event, sections: bySection(listed), states, recorded: !!record };
+	const program = programOf(programs, event.start);
+	return { event, program: program ? programLabel(program) : null, sections: bySection(listed), states, recorded: !!record };
 };
 
 export const actions: Actions = {
 	default: async ({ request, params }) => {
-		const { events, members } = await getSeason();
+		const { events, members, programs } = await getSeason(dateOf(params.key));
 		const event = events.find((r) => r.key === params.key);
 		if (!event) {
 			error(404, 'Evento não encontrado');
@@ -63,7 +68,7 @@ export const actions: Actions = {
 		}
 
 		try {
-			await saveAttendance(record);
+			await saveAttendance(record, programOf(programs, event.start)?.id);
 		} catch (e) {
 			console.error('Could not save attendance:', e);
 			return fail(502, { failed: true });

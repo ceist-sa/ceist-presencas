@@ -3,6 +3,8 @@ import { env } from '$env/dynamic/private';
 import type { CalendarEvent } from '$lib/types';
 
 const CACHE_MS = 5 * 60 * 1000;
+/** The whole feed is parsed and kept, so that programs of earlier seasons can be looked at */
+const EVERYTHING = '2000-01-01T00:00';
 /** How far ahead events are listed */
 const DAYS_AHEAD = 60;
 
@@ -97,7 +99,7 @@ export function parseCalendar(text: string, from: string, to: string): CalendarE
 
 		const iterator = series.iterator();
 		// The limit guards against a rule with no end
-		for (let i = 0; i < 2000; i++) {
+		for (let i = 0; i < 5000; i++) {
 			const next = iterator.next();
 			if (!next || wallClock(next) > to) break;
 			const occurrence = series.getOccurrenceDetails(next);
@@ -113,13 +115,15 @@ export function parseCalendar(text: string, from: string, to: string): CalendarE
 }
 
 /**
- * This season's events from the iCal feed, up to a couple of months ahead, oldest first. Every event
+ * The feed's events from the given time (by default the start of this season) up to a couple of months
+ * ahead, oldest first. Every event
  * can have attendance (rehearsals, concerts, anything else) unless it is explicitly left out, either by
  * writing "sem presenças" in its title or description or through ICAL_EXCLUDE.
  */
-export async function getEvents(): Promise<CalendarEvent[]> {
+export async function getEvents(from = seasonStart()): Promise<CalendarEvent[]> {
+	const since = (events: CalendarEvent[]) => events.filter((event) => event.start >= from);
 	if (cache && Date.now() - cache.at < CACHE_MS) {
-		return cache.events;
+		return since(cache.events);
 	}
 	if (!env.ICAL_URL) {
 		throw new Error('ICAL_URL is not configured');
@@ -132,16 +136,16 @@ export async function getEvents(): Promise<CalendarEvent[]> {
 		}
 		const horizon = lisbon(new Date(Date.now() + DAYS_AHEAD * 24 * 60 * 60 * 1000));
 		const exclude = env.ICAL_EXCLUDE ? new RegExp(env.ICAL_EXCLUDE, 'i') : undefined;
-		const events = parseCalendar(await response.text(), seasonStart(), horizon).filter(
+		const events = parseCalendar(await response.text(), EVERYTHING, horizon).filter(
 			(r) => !exclude?.test(r.title)
 		);
 		cache = { at: Date.now(), events };
-		return events;
+		return since(events);
 	} catch (error) {
 		// A stale list is better than none while the calendar is unreachable
 		if (cache) {
 			console.error('Could not refresh the calendar feed:', error);
-			return cache.events;
+			return since(cache.events);
 		}
 		throw error;
 	}

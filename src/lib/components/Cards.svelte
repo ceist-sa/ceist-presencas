@@ -45,7 +45,7 @@
 
 	const buttons: { choice: MemberState; label: string; colour: string }[] = [
 		{ choice: 'present', label: 'Presente', colour: 'bg-present' },
-		{ choice: 'late', label: 'Atraso', colour: 'bg-late' },
+		{ choice: 'late', label: 'Meia presença', colour: 'bg-late' },
 		{ choice: 'absent', label: 'Falta', colour: 'bg-absent' },
 		{ choice: 'justified', label: 'Justificada', colour: 'bg-justified' }
 	];

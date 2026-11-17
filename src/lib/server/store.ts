@@ -17,6 +17,8 @@ function store(): typeof notion | typeof local {
 export const usingSampleData = () => !env.NOTION_TOKEN;
 
 export const getMembers = () => store().getMembers();
+/** The programs of every season, oldest first. */
+export const getPrograms = () => store().getPrograms();
 /** Events recorded since the given Lisbon time (`YYYY-MM-DDTHH:MM`). */
 export const getAttendance = (since: string) => store().getAttendance(since);
-export const saveAttendance: typeof notion.saveAttendance = (record) => store().saveAttendance(record);
+export const saveAttendance: typeof notion.saveAttendance = (record, program) => store().saveAttendance(record, program);

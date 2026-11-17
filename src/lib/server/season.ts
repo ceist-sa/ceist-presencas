@@ -1,24 +1,32 @@
-import type { AttendanceRecord, Member, CalendarEvent } from '$lib/types';
+import type { AttendanceRecord, Member, CalendarEvent, Program } from '$lib/types';
 import { getEvents, lisbonNow, seasonStart } from './calendar';
-import { getAttendance, getMembers } from './store';
+import { getAttendance, getMembers, getPrograms } from './store';
 
 export interface Season {
-	/** Events of the current season, oldest first */
+	/** Events since the start of the period, oldest first */
 	events: CalendarEvent[];
-	/** Attendance already recorded this season, by event key */
+	/** Attendance already recorded in the period, by event key */
 	records: Map<string, AttendanceRecord>;
 	members: Member[];
+	/** Every program, oldest first */
+	programs: Program[];
 	/** Today's date in Lisbon, `YYYY-MM-DD` */
 	today: string;
 }
 
-/** Everything the pages need: the calendar's events joined with what is recorded in Notion. */
-export async function getSeason(): Promise<Season> {
+/**
+ * Everything the pages need: the calendar's events joined with what is recorded in Notion. Covers the
+ * current season, or goes further back when given an earlier date (`YYYY-MM-DD`).
+ */
+export async function getSeason(from?: string): Promise<Season> {
 	const now = lisbonNow();
-	const [fromCalendar, attendance, members] = await Promise.all([
-		getEvents(),
-		getAttendance(seasonStart(now)),
-		getMembers()
+	const season = seasonStart(now);
+	const since = from && `${from}T00:00` < season ? `${from}T00:00` : season;
+	const [fromCalendar, attendance, members, programs] = await Promise.all([
+		getEvents(since),
+		getAttendance(since),
+		getMembers(),
+		getPrograms()
 	]);
 
 	const records = new Map(attendance.map((r) => [r.key, r]));
@@ -33,6 +41,7 @@ export async function getSeason(): Promise<Season> {
 		events: [...fromCalendar, ...orphans].sort((a, b) => a.start.localeCompare(b.start)),
 		records,
 		members,
+		programs,
 		today: now.slice(0, 10)
 	};
 }

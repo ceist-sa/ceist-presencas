@@ -10,14 +10,15 @@ Internal site for recording who attends each rehearsal and concert of the
 - The **attendance** is stored in a Notion database, one row per member per event.
 
 The Direção opens the site on a phone, enters a shared password, picks the event and ticks who came.
-Each member ends up in one of four states: present, late, absent or absent with justification.
+Each member ends up in one of four states: present, half presence ("meia presença", for arriving late or leaving early), absent or absent with
+justification. A half presence counts as half in the percentages.
 On a phone there is also a card mode, which shows one member at a time with a button per state; on-call
 members only get a card when added with "Adicionar mais músicos".
 Anyone can be marked as not called to an event (the winds at a strings-only rehearsal, say); they then get
 no record for it and it doesn't count for them.
 Members whose status is "Ativo por convocação" aren't expected at every event, so they are listed apart
-and start as "not called"; when they are called they can be present, late or absent like anyone else, and only
-those events count for them. The "Membros" page shows each member's attendance for the season
+and start as "not called"; when they are called they can be present, half present or absent like anyone else, and only
+those events count for them. The "Estatísticas" page shows each member's attendance for the season
 (1 September to 31 August).
 
 ## Tech stack
@@ -56,10 +57,27 @@ without access to Notion.
 3. Create an empty database for the attendance (or choose a page to hold a new one), share it with the
    integration and run:
    ```bash
-   bun run setup-notion <database or page URL>
+   bun run setup-notion <attendance database or page URL>
    ```
    It adds the columns the site needs to the database (or creates "Presenças nos Eventos" in the page) and
    prints the `NOTION_ATTENDANCE_DB` to put in `.env`.
+
+### Programs
+
+A season is split into programs ("Outono", "Natal"…), kept in a "Programas" database in Notion with a name,
+a season (`Temporada`, e.g. "2026/27", since names repeat from year to year) and start and end dates
+(`Início`, `Fim`). An event belongs to the program whose dates include it. The Estatísticas page shows the
+statistics of a program or of a whole season, and a grid with a row per member and a column per event.
+
+To set it up, create an empty database, share it with the integration and run the setup again with both:
+
+```bash
+bun run setup-notion <attendance database URL> <programs database URL>
+```
+
+It adds the columns to the programs database and a `Programa` relation to the attendance one, which the
+site fills in when saving, and prints the `NOTION_PROGRAMS_DB` to put in `.env`. Without it the site works
+by season only.
 
 The cards show a picture of each member when there is one: the first file of a `Fotografia` files property in
 "Dados dos Membros" if that property exists, otherwise the avatar of the Notion account in `Person`, otherwise
@@ -76,7 +94,7 @@ One row per member per event:
 | --- | --- | --- |
 | `Registo` | Title | Member and date, such as "Ana Silva · 16/11/2026" |
 | `Membro` | Relation to Dados dos Membros | The member |
-| `Estado` | Select | `Presença`, `Atraso`, `Falta justificada` or `Falta injustificada` |
+| `Estado` | Select | `Presença`, `Meia presença`, `Falta justificada` or `Falta injustificada` |
 | `Evento` | Text | The event's title in the calendar |
 | `Data` | Date | Start of the event |
 | `Chave` | Text | Start time such as `2026-11-16T1830`. This is how the site matches a row to an event, so don't edit it |
@@ -96,7 +114,7 @@ its record stays listed under the old time.
 - `src/lib/server/notion.ts`: members and attendance in Notion.
 - `src/lib/server/local.ts`: the sample store used in development.
 - `src/lib/server/auth.ts` and `src/hooks.server.ts`: the shared password.
-- `src/routes/`: the event list (`/`), the checklist (`/eventos/[key]`) and the season summary (`/membros`).
+- `src/routes/`: the event list (`/`), the checklist (`/eventos/[key]`) and the statistics per program or season (`/estatisticas`).
 
 ## Deployment
 

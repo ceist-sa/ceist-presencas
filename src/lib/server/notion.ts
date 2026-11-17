@@ -1,5 +1,6 @@
 import { env } from '$env/dynamic/private';
-import type { AttendanceRecord, Member } from '$lib/types';
+import { seasonOf, seasonRange } from '$lib/programs';
+import type { AttendanceRecord, Member, Program } from '$lib/types';
 
 // Notion's REST API, called directly. This version addresses databases by their database id.
 const API = 'https://api.notion.com/v1';
@@ -27,7 +28,18 @@ const ATTENDANCE = {
 	state: 'Estado',
 	event: 'Evento',
 	date: 'Data',
-	key: 'Chave'
+	key: 'Chave',
+	/** Relation to the program the event is in, so that rows can be filtered by program in Notion */
+	program: 'Programa'
+};
+
+/** Property names in the "Programas" database. scripts/setup-notion.ts adds them with the same names. */
+const PROGRAM = {
+	name: 'Nome',
+	/** e.g. "2026/27". Worked out from the start date when left empty. */
+	season: 'Temporada',
+	start: 'Início',
+	end: 'Fim'
 };
 
 const MEMBERS_CACHE_MS = 5 * 60 * 1000;
@@ -125,19 +137,54 @@ export async function getMembers(): Promise<Member[]> {
 	return members;
 }
 
+let programsCache: { at: number; programs: Program[] } | undefined;
+
+/** Every program with a start date, oldest first. None if there is no programs database. */
+export async function getPrograms(): Promise<Program[]> {
+	if (!env.NOTION_PROGRAMS_DB) {
+		return [];
+	}
+	if (programsCache && Date.now() - programsCache.at < MEMBERS_CACHE_MS) {
+		return programsCache.programs;
+	}
+
+	const programs = (await queryAll(env.NOTION_PROGRAMS_DB))
+		.map((page): Program | undefined => {
+			const properties = page.properties;
+			const start: string | undefined = properties[PROGRAM.start]?.date?.start?.slice(0, 10);
+			if (!start) return undefined;
+			const season = properties[PROGRAM.season];
+			return {
+				id: page.id,
+				name: plainText(properties[PROGRAM.name]) || 'Programa',
+				season: season?.select?.name ?? (plainText(season) || seasonOf(start)),
+				start,
+				// A program with no end date yet runs until the end of its season
+				end: properties[PROGRAM.end]?.date?.start?.slice(0, 10) ?? seasonRange(seasonOf(start)).to
+			};
+		})
+		.filter((program) => program !== undefined)
+		.sort((a, b) => a.start.localeCompare(b.start));
+
+	programsCache = { at: Date.now(), programs };
+	return programs;
+}
+
 const STATES = ['present', 'late', 'absent', 'justified'] as const;
 type State = (typeof STATES)[number];
 
 /** Options of the "Estado" select. scripts/setup-notion.ts creates them with the same names. */
 const STATE_NAMES: Record<State, string> = {
 	present: 'Presença',
-	late: 'Atraso',
+	late: 'Meia presença',
 	justified: 'Falta justificada',
 	absent: 'Falta injustificada'
 };
 
 function stateOf(page: Json): State | undefined {
 	const name = page.properties[ATTENDANCE.state]?.select?.name;
+	// Rows from when a half presence was called a late arrival
+	if (name === 'Atraso') return 'late';
 	return STATES.find((state) => STATE_NAMES[state] === name);
 }
 
@@ -163,8 +210,9 @@ let attendanceCache: { at: number; since: string; records: Map<string, Attendanc
 
 /** Every event recorded since the given time, rebuilt from the one-row-per-member-per-event table. */
 export async function getAttendance(since: string): Promise<AttendanceRecord[]> {
-	if (attendanceCache && attendanceCache.since === since && Date.now() - attendanceCache.at < ATTENDANCE_CACHE_MS) {
-		return [...attendanceCache.records.values()];
+	// A copy that goes further back than asked also has the answer
+	if (attendanceCache && attendanceCache.since <= since && Date.now() - attendanceCache.at < ATTENDANCE_CACHE_MS) {
+		return [...attendanceCache.records.values()].filter((record) => record.start >= since);
 	}
 
 	const pages = await queryAll(required('NOTION_ATTENDANCE_DB'), {
@@ -203,9 +251,15 @@ export async function getAttendance(since: string): Promise<AttendanceRecord[]> 
 	return [...records.values()];
 }
 
-/** Brings the rows of an event in line with the record: one row per member who was expected. */
-export async function saveAttendance(record: AttendanceRecord): Promise<void> {
+/**
+ * Brings the rows of an event in line with the record: one row per member who was expected, each linked
+ * to the event's program (a Notion page id) when there is a programs database.
+ */
+export async function saveAttendance(record: AttendanceRecord, program?: string): Promise<void> {
 	const databaseId = required('NOTION_ATTENDANCE_DB');
+	const programRelation = env.NOTION_PROGRAMS_DB
+		? { [ATTENDANCE.program]: { relation: program ? [{ id: program }] : [] } }
+		: {};
 	const names = new Map((await getMembers()).map((member) => [member.id, member.name]));
 
 	const wanted = new Map<string, State>();
@@ -228,8 +282,11 @@ export async function saveAttendance(record: AttendanceRecord): Promise<void> {
 			continue;
 		}
 		kept.add(member);
-		if (stateOf(page) !== state) {
-			const properties = { [ATTENDANCE.state]: { select: { name: STATE_NAMES[state] } } };
+		// The program is brought up to date too, in case the program's dates changed since the last save
+		const programChanged =
+			!!env.NOTION_PROGRAMS_DB && page.properties[ATTENDANCE.program]?.relation?.[0]?.id !== program;
+		if (stateOf(page) !== state || programChanged) {
+			const properties = { [ATTENDANCE.state]: { select: { name: STATE_NAMES[state] } }, ...programRelation };
 			tasks.push(() => notion(`/pages/${page.id}`, { method: 'PATCH', body: { properties } }));
 		}
 	}
@@ -244,7 +301,8 @@ export async function saveAttendance(record: AttendanceRecord): Promise<void> {
 			[ATTENDANCE.state]: { select: { name: STATE_NAMES[state] } },
 			[ATTENDANCE.event]: { rich_text: text(record.title) },
 			[ATTENDANCE.date]: { date: { start: `${record.start}:00`, time_zone: 'Europe/Lisbon' } },
-			[ATTENDANCE.key]: { rich_text: text(record.key) }
+			[ATTENDANCE.key]: { rich_text: text(record.key) },
+			...programRelation
 		};
 		tasks.push(() => notion('/pages', { method: 'POST', body: { parent: { database_id: databaseId }, properties } }));
 	}

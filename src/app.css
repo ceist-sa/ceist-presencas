@@ -29,7 +29,7 @@
   --color-sand: #D2C4AC;
   --color-sky: #ACCAD2;
 
-  /* Attendance states: green for present, yellow for late, red for absent (lighter when justified) */
+  /* Attendance states: green for present, yellow for half a presence, red for absent (lighter when justified) */
   --color-present: #ACD2AC;
   --color-late: hsl(48, 55%, 72%);
   --color-absent: hsl(0, 40%, 75%);
